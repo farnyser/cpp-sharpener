@@ -23,7 +23,7 @@ enum class Type
 	Literal,
 	IdentifierList,
 	Block,
-	// Comment,
+	Comment,
 	// Numeric,
 	Arrow,
 	Unknown
@@ -74,6 +74,8 @@ struct Parser
 		{
 			if(parseInstruction && instruction() != Token::Empty()) 
 				return instruction();
+			if(comment() != Token::Empty()) 
+				return comment();
 			if(literal() != Token::Empty()) 
 				return literal();
 			if(identifierList() != Token::Empty()) 
@@ -159,6 +161,41 @@ struct Parser
 		
 		if(success)
 			return Token { Type::IdentifierList, "(" + result + ")", result };
+		
+		return Token::Empty();
+	}
+
+	Token comment()
+	{
+		std::string result;
+
+		if(position+1 < buffer.length() && buffer[position] == '/' && buffer[position+1] == '/')
+		{
+			result = "//";
+			
+			for(auto i = position + 2; i < buffer.length() ; i++)
+			{
+				result += buffer[i];
+				if(buffer[i] == '\n') 
+					break;
+			}
+		}
+		if(position+1 < buffer.length() && buffer[position] == '/' && buffer[position+1] == '*')
+		{
+			result = "/*";
+			
+			for(auto i = position + 2; i < buffer.length() ; i++)
+			{
+				result += buffer[i];
+				if(i+1 < buffer.length() && buffer[i] == '*' && buffer[i+1] == '/') {
+					result += '/';
+					break;
+				}
+			}
+		}
+
+		if(result.length() > 0) 
+			return Token { Type::Comment, result, result };
 		
 		return Token::Empty();
 	}
@@ -345,7 +382,10 @@ void run_tests()
 	error += check(transform("(x, y) => { foobar(x); foobar(y); }"), "[&](auto x, auto y){ foobar(x); foobar(y); }");
 	error += check(transform("(x => x * x)(2)"), "([&](auto x){ return x * x; })(2)");
 	error += check(transform("x => \n x * x"), "[&](auto x){ return x * x; }");
-	//~ error += check(transform("//x => \n x * x"), "//x => \n x * x");
+	error += check(transform("/* x => x * x */"), "/* x => x * x */");
+	error += check(transform("x /* => */ {42}"), "x /* => */ {42}");
+	error += check(transform("//x => \n x * x"), "//x => \n x * x");
+	error += check(transform("(x,y) => { auto i = x * y; /* test } */ return i; }"), "[&](auto x, auto y){ auto i = x * y; /* test } */ return i; }");
 	
 	if(error != 0)
 		throw std::runtime_error("Integrated tests failing!");
