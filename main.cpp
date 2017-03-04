@@ -62,7 +62,7 @@ struct Parser
 	Parser next(const Token& t) 
 	{
 		for(auto i = position+t.text.length(); i < buffer.length() ; i++) 
-			if(buffer[i] != ' ' && buffer[i] != '\t')
+			if(buffer[i] != ' ' && buffer[i] != '\t' && buffer[i] != '\n')
 				return Parser{i, buffer}; 
 				
 		return Parser{buffer.length(), buffer};
@@ -91,7 +91,7 @@ struct Parser
 		
 		return Token::Empty();
 	}
-
+	
 	Token arrow() 
 	{
 		if(position+1 < buffer.length() && buffer[position] == '=' && buffer[position+1] == '>')
@@ -344,6 +344,8 @@ void run_tests()
 	error += check(transform("() => foobar()"), "[&](){ return foobar(); }");
 	error += check(transform("(x, y) => { foobar(x); foobar(y); }"), "[&](auto x, auto y){ foobar(x); foobar(y); }");
 	error += check(transform("(x => x * x)(2)"), "([&](auto x){ return x * x; })(2)");
+	error += check(transform("x => \n x * x"), "[&](auto x){ return x * x; }");
+	//~ error += check(transform("//x => \n x * x"), "//x => \n x * x");
 	
 	if(error != 0)
 		throw std::runtime_error("Integrated tests failing!");
