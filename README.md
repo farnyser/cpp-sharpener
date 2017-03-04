@@ -15,5 +15,5 @@ Bild & Usage
 ------------
 
 	g++ -std=c++14 main.cpp -o sharpener
-	cat test.cpp | ./sharpener | g++ -xc++ -std=c++14 -o test -
-	./test
+	cat example.cpp | ./sharpener | g++ -xc++ -std=c++14 -o example -
+	./example

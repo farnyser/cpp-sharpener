@@ -23,8 +23,8 @@ enum class Type
 	Literal,
 	IdentifierList,
 	Block,
-	Comment,
-	Numeric,
+	// Comment,
+	// Numeric,
 	Arrow,
 	Unknown
 };
@@ -70,7 +70,6 @@ struct Parser
 	
 	Token parse(bool parseInstruction = true) 
 	{
-		// comment, literal, numeric, block, identifierList, identifier, arrow
 		while(!eof())
 		{
 			if(parseInstruction && instruction() != Token::Empty()) 
@@ -228,17 +227,18 @@ struct Parser
 			auto t = n.parse(false);		
 			if(t.type == Type::Block || n.eof()) 
 				break;
-			if(token_count == 0 && t.type != Type::Identifier)
-				break;
 			if(t.type == Type::Unknown && t.text == "(") 
 				lp++;
-			if(t.type == Type::Unknown && t.text == ")") 
+			else if(t.type == Type::Unknown && t.text == ")") 
 				lp--;
+			else if(t.type == Type::Unknown && t.text == ";" ) 
+				break;
+			else if(token_count == 0 && t.type != Type::Identifier)
+				break;
+			
 			if(lp < 0) 
 				break;
-			if(t.type == Type::Unknown && t.text == ";" ) 
-				break;
-
+			
 			result += t.text;
 			token_count++;
 
@@ -266,7 +266,8 @@ std::string tbegin(const Token& token)
 		std::string result = "auto ";
 		for(auto& x : token.innerText) 
 		{
-			result += x;
+			if(x != ' ' && x != '\t')
+				result += x;
 			if(x == ',')
 				result += " auto ";
 		}
@@ -281,7 +282,7 @@ std::string tend(const Token& token)
 {
 	if(token.type == Type::Block)
 		return transform(token.text);
-	
+		
 	return "{ return " + transform(token.text) + "; }";
 }
 
@@ -318,16 +319,39 @@ std::string transform(const std::string& input)
 	return output;
 }
 
+int check(const std::string& test, const std::string& expected)
+{
+	if(expected != test)
+	{
+		std::cerr << "Expected: " << std::endl
+			<< "\t" << expected << std::endl
+			<< "But was " << std::endl
+			<< "\t" << test << std::endl;
+		
+		return 1;
+	}
+	
+	return 0;
+}
+
+void run_tests()
+{
+	int error = 0;
+	error += check(transform("hello"), "hello");
+	error += check(transform("x => x * 2"), "[&](auto x){ return x * 2; }");
+	error += check(transform("(x, y) => x+y"), "[&](auto x, auto y){ return x+y; }");
+	error += check(transform("(x, y) => (x+y) * 2"), "[&](auto x, auto y){ return (x+y) * 2; }");
+	error += check(transform("() => foobar()"), "[&](){ return foobar(); }");
+	error += check(transform("(x, y) => { foobar(x); foobar(y); }"), "[&](auto x, auto y){ foobar(x); foobar(y); }");
+	error += check(transform("(x => x * x)(2)"), "([&](auto x){ return x * x; })(2)");
+	
+	if(error != 0)
+		throw std::runtime_error("Integrated tests failing!");
+}
+
 int main(int argc, char **argv)
 {
+	run_tests();
 	std::cout << transform(read(std::cin));
 	return EXIT_SUCCESS;
 }
-
-// (x => x * x)(2)
-// () => foo();
-// (x, y) => x * y;
-// (x, y) => foo(x, y) * 42;
-// x => x * x;
-// x => { x.age = 1; x.name = "toto"; };
-// data.where(x => x < 10);
