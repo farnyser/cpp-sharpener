@@ -104,7 +104,7 @@ struct Parser
 	{
 		std::string result;	
 
-		for(int i = position; i < buffer.size() ; i++)
+		for(auto i = position; i < buffer.size() ; i++)
 		{
 			auto x = buffer[i];
 			if(x >= '0' && x <= '9')
@@ -169,7 +169,7 @@ struct Parser
 
 		char start = 0;
 		bool backslash = false;
-		for(int i = position, c = 0; i < buffer.size() ; i++) 
+		for(auto i = position; i < buffer.size() ; i++) 
 		{
 			auto x = buffer[i];
 			if(i == position && x != '\'' && x != '"')
