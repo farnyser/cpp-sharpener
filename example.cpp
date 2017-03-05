@@ -9,11 +9,14 @@ void foreach(const DATA& data, const T& f)
 		f(d);
 }
 
-auto test(auto x = {42}) => x; 
+auto identity(auto x = {42}) => x; 
 
 int main(int argc, char **argv)
 {
+	int a = 0;
+	std::cout << identity(a ?? 5) << std::endl;
 	std::cout << (x => x * x)(3) << std::endl;
+	std::cout << (x => x * x)(0 ?? 7) << std::endl;
 	std::cout << (x => x * x)(5) << std::endl;
 	std::cout << (x => x * 2)(3) << std::endl;
 	std::cout << (() => "hello")() << std::endl;

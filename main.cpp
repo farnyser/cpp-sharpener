@@ -26,6 +26,7 @@ enum class Type
 	Block,
 	Comment,
 	Arrow,
+	FirstNotNull,
 	Unknown
 };
 
@@ -52,7 +53,11 @@ struct Token
 	
 	operator bool() { 
 		return type != Type::Empty;
-	}	
+	}
+	
+	std::string debug() {
+		return text + "[" + std::to_string((int)type) + "]";
+	}
 };
 
 struct Parser 
@@ -90,6 +95,8 @@ struct Parser
 				return identifier();
 			if(arrow()) 
 				return arrow();
+			if(firstNotNull()) 
+				return firstNotNull();
 			if(block()) 
 				return block();
 			
@@ -104,6 +111,14 @@ struct Parser
 	{
 		if(position+1 < buffer.length() && buffer[position] == '=' && buffer[position+1] == '>')
 			return Token{Type::Arrow, "=>", "=>"};
+		
+		return Token::Empty();
+	}
+
+	Token firstNotNull() 
+	{
+		if(position+1 < buffer.length() && buffer[position] == '?' && buffer[position+1] == '?')
+			return Token{Type::FirstNotNull, "??", "??"};
 		
 		return Token::Empty();
 	}
@@ -134,6 +149,7 @@ struct Parser
 		std::string result;	
 		bool success = false;
 		int lp = 0;
+		int tk = 1;
 
 		Parser n{position, buffer};
 		auto t = n.identifier();
@@ -154,10 +170,16 @@ struct Parser
 				break;
 			if(t.type == Type::IdentifierList)
 				success = true;
+			if(tk <= 1 && t.type == Type::Unknown && t.text == "(")
+				break;
+			if(tk <= 1 && t.type == Type::Unknown && t.text == ")")
+				break;
 			if(t.type == Type::Unknown && t.text == "(")
 				lp++;
 			if(t.type == Type::Unknown && t.text == ")")
 				lp--, success = lp == 0;
+			if(t.type == Type::Identifier)
+				tk++;
 		}
 			
 		if(success && lp == 0 && result.length() > 0)
@@ -305,19 +327,21 @@ struct Parser
 				lp--;
 			else if(t.type == Type::Unknown && t.text == ";" ) 
 				break;
+			else if(t.type == Type::FirstNotNull) 
+				break;
 			else if(token_count == 0 && t.type != Type::Identifier)
 				break;
 			
 			if(lp < 0) 
 				break;
-			
+
 			result += t.text;
 			token_count++;
 
 			n.consume(t);
 		}
-
-		if(token_count > 1 && result.length() > 0)
+		
+		if(token_count > 1 && lp <= 0 && result.length() > 0)
 			return Token{ Type::Instruction, result, result };
 		
 		return Token::Empty();
@@ -362,6 +386,25 @@ std::string tend(const Token& token)
 	return "{ return " + transform(token.text) + "; }";
 }
 
+std::string trim_begin(const std::string& input)
+{	
+	size_t i = 0;
+	for(; i < input.length() && std::isspace(input[i]) ; i++);
+	return input.substr(i);
+}
+
+std::string trim_end(const std::string& input)
+{	
+	size_t i = input.length();
+	for(; i > 0 && std::isspace(input[i-1]) ; i--);
+	return input.substr(0, i);
+}
+
+std::string trim(const std::string& input)
+{		
+	return trim_begin(trim_end(input));
+}
+
 std::string transform(const std::string& input)
 {
 	Parser buffer{0, input};
@@ -369,28 +412,56 @@ std::string transform(const std::string& input)
 	
 	while(!buffer.eof())
 	{
-		auto token = buffer.parse(false);
-		auto next_buffer = buffer.next(token);
-		auto next = next_buffer.parse(false);
-		auto next_buffer2 = next_buffer.next(next);
-		auto next2 = next_buffer2.parse(true, false);		
-		
-		if(next.type == Type::Arrow && (token.type == Type::Signature || token.type == Type::Identifier || token.type == Type::IdentifierList)) {
-			output += tbegin(token) + tend(next2);
-			buffer = next_buffer2;
-			buffer.consume(next2);
-			continue;
+		{
+			auto token = buffer.parse(true);				
+			auto next_buffer = buffer.next(token);
+			auto next = next_buffer.parse(false);
+			auto next_buffer2 = next_buffer.next(next);
+			auto next2 = next_buffer2.parse(true, false);
+			
+			if(next.type == Type::FirstNotNull) {
+				output += "first_not_null(" + trim(token.text) + ", " + trim(next2.text) + ")";
+				buffer = next_buffer2;
+				buffer.consume(next2);
+				continue;
+			}
 		}
-				
-		if(token.type == Type::Block)
-			output += "{" + transform(token.innerText) + "}";
-		else
-			output += token.text;
 		
-		buffer.consume(token);
+		{
+			auto token = buffer.parse(false);				
+			auto next_buffer = buffer.next(token);
+			auto next = next_buffer.parse(false);
+			auto next_buffer2 = next_buffer.next(next);
+			auto next2 = next_buffer2.parse(true, false);		
+
+			if(next.type == Type::Arrow && (token.type == Type::Signature || token.type == Type::Identifier || token.type == Type::IdentifierList)) {
+				output += tbegin(token) + tend(next2);
+				buffer = next_buffer2;
+				buffer.consume(next2);
+				continue;
+			}
+		}
+		
+		{
+			auto token = buffer.parse(false, false);				
+
+			if(token.type == Type::Block)
+				output += "{" + transform(token.innerText) + "}";
+			else
+				output += token.text;
+			
+			buffer.consume(token);
+		}
 	}
 
 	return output;
+}
+
+std::string handle(const std::string& input)
+{
+	const std::string first_not_null = "auto first_not_null(auto&& a, auto&& b) { auto&& x = a; return x ? x : b; }";
+
+	return first_not_null + "\n" + transform(input);
 }
 
 int check(const std::string& test, const std::string& expected)
@@ -430,6 +501,10 @@ void run_tests()
 	error += check(transform("std::cout << (x => x * x)(5) << std::endl;"), "std::cout << ([&](auto x){ return x * x; })(5) << std::endl;");
 	error += check(transform("std::cout << (() => '!')() << std::endl;"), "std::cout << ([&](){ return '!'; })() << std::endl;");
 	error += check(transform("auto test(auto x = foo(), auto y = {42}) => x * y;"), "auto test(auto x = foo(), auto y = {42}) { return x * y; };");
+	error += check(transform("a ?? b"), "first_not_null(a, b)");
+	error += check(transform("foo(a ?? b)"), "foo(first_not_null(a, b))");
+	error += check(transform("foo(x() ?? y(1, 2))"), "foo(first_not_null(x(), y(1, 2)))");
+	error += check(transform("std::cout << (a ?? b)"), "std::cout << (first_not_null(a, b))");
 
 	if(error != 0)
 		throw std::runtime_error("Integrated tests failing!");
@@ -438,6 +513,6 @@ void run_tests()
 int main(int argc, char **argv)
 {
 	run_tests();
-	std::cout << transform(read(std::cin));
+	std::cout << handle(read(std::cin));
 	return EXIT_SUCCESS;
 }

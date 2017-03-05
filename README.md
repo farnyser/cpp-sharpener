@@ -14,6 +14,11 @@ Build a lambda C# style:
 Simple named function:
 
 	int foobar() => 42;
+
+First value not false:
+
+	int a = 0;
+	std::cout << a ?? 3 << std::endl; // output 3 
 	
 Bild & Usage
 ------------
