@@ -9,6 +9,8 @@ void foreach(const DATA& data, const T& f)
 		f(d);
 }
 
+auto test(auto x = {42}) => x; 
+
 int main(int argc, char **argv)
 {
 	std::cout << (x => x * x)(3) << std::endl;

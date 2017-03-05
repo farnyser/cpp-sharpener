@@ -18,6 +18,7 @@ enum class Type
 {
 	Empty,
 	Space,
+	Signature,
 	Identifier,
 	Instruction,
 	Literal,
@@ -68,10 +69,12 @@ struct Parser
 		return Parser{buffer.length(), buffer};
 	}
 	
-	Token parse(bool parseInstruction = true) 
+	Token parse(bool parseInstruction = true, bool parseSignature = true) 
 	{
 		while(!eof())
 		{
+			if(parseSignature && signature() != Token::Empty()) 
+				return signature();
 			if(parseInstruction && instruction() != Token::Empty()) 
 				return instruction();
 			if(comment() != Token::Empty()) 
@@ -128,6 +131,44 @@ struct Parser
 		return Token::Empty();
 	}
 	
+	Token signature() 
+	{
+		std::string result;	
+		bool success = false;
+		int lp = 0;
+
+		Parser n{position, buffer};
+		auto t = n.identifier();
+		
+		if(t.type != Type::Empty) 
+		{ 
+			while(!n.eof()) 
+			{
+				result += t.text;
+				n.consume(t);
+				
+				t = n.parse(false, false);
+				if(t.type == Type::Unknown && t.text == ";")
+					break;
+				if(lp == 0 && t.type == Type::Block)
+					break;
+				if(t.type == Type::Arrow)
+					break;
+				if(t.type == Type::IdentifierList)
+					success = true;
+				if(t.type == Type::Unknown && t.text == "(")
+					lp++;
+				if(t.type == Type::Unknown && t.text == ")")
+					lp--, success = lp == 0;
+			}
+		}
+		
+		if(success && lp == 0 && result.length() > 0)
+			return Token { Type::Signature, result, result };
+		
+		return Token::Empty();
+	}
+
 	Token identifierList() 
 	{
 		std::string result;	
@@ -261,7 +302,7 @@ struct Parser
 		auto n = *this;
 		while(true) 
 		{
-			auto t = n.parse(false);		
+			auto t = n.parse(false, false);		
 			if(t.type == Type::Block || n.eof()) 
 				break;
 			if(t.type == Type::Unknown && t.text == "(") 
@@ -311,6 +352,10 @@ std::string tbegin(const Token& token)
 			
 		return "[&](" + result + ")";
 	}
+	else if(token.type == Type::Signature)
+	{
+	return token.text;
+	}
 	
 	return "[&](auto " + token.text + ")";
 }
@@ -334,15 +379,15 @@ std::string transform(const std::string& input)
 		auto next_buffer = buffer.next(token);
 		auto next = next_buffer.parse(false);
 		auto next_buffer2 = next_buffer.next(next);
-		auto next2 = next_buffer2.parse();
+		auto next2 = next_buffer2.parse(true, false);		
 		
-		if(next.type == Type::Arrow && (token.type == Type::Identifier || token.type == Type::IdentifierList)) {
+		if(next.type == Type::Arrow && (token.type == Type::Signature || token.type == Type::Identifier || token.type == Type::IdentifierList)) {
 			output += tbegin(token) + tend(next2);
 			buffer = next_buffer2;
 			buffer.consume(next2);
 			continue;
 		}
-		
+				
 		if(token.type == Type::Block) {
 			output += "{" + transform(token.innerText) + "}";
 		}
@@ -386,7 +431,12 @@ void run_tests()
 	error += check(transform("x /* => */ {42}"), "x /* => */ {42}");
 	error += check(transform("//x => \n x * x"), "//x => \n x * x");
 	error += check(transform("(x,y) => { auto i = x * y; /* test } */ return i; }"), "[&](auto x, auto y){ auto i = x * y; /* test } */ return i; }");
-	
+	error += check(transform("int get() => this->x;"), "int get() { return this->x; };");
+	error += check(transform("auto set(int x, int y) => v = x * y;"), "auto set(int x, int y) { return v = x * y; };");
+	error += check(transform("std::cout << (x => x * x)(5) << std::endl;"), "std::cout << ([&](auto x){ return x * x; })(5) << std::endl;");
+	error += check(transform("std::cout << (() => '!')() << std::endl;"), "std::cout << ([&](){ return '!'; })() << std::endl;");
+	error += check(transform("auto test(auto x = foo(), auto y = {42}) => x * y;"), "auto test(auto x = foo(), auto y = {42}) { return x * y; };");
+
 	if(error != 0)
 		throw std::runtime_error("Integrated tests failing!");
 }
