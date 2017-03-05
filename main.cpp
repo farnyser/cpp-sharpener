@@ -50,6 +50,10 @@ struct Token
 	bool operator!=(const Token& other) {
 		return other.type != type || other.text != text;
 	}
+	
+	operator bool() { 
+		return type != Type::Empty;
+	}	
 };
 
 struct Parser 
@@ -73,21 +77,21 @@ struct Parser
 	{
 		while(!eof())
 		{
-			if(parseSignature && signature() != Token::Empty()) 
+			if(parseSignature && signature()) 
 				return signature();
-			if(parseInstruction && instruction() != Token::Empty()) 
+			if(parseInstruction && instruction()) 
 				return instruction();
-			if(comment() != Token::Empty()) 
+			if(comment()) 
 				return comment();
-			if(literal() != Token::Empty()) 
+			if(literal()) 
 				return literal();
-			if(identifierList() != Token::Empty()) 
+			if(identifierList()) 
 				return identifierList();
-			if(identifier() != Token::Empty()) 
+			if(identifier()) 
 				return identifier();
-			if(arrow() != Token::Empty()) 
+			if(arrow()) 
 				return arrow();
-			if(block() != Token::Empty()) 
+			if(block()) 
 				return block();
 			
 			auto str = std::string() + buffer[position];
@@ -140,7 +144,7 @@ struct Parser
 		Parser n{position, buffer};
 		auto t = n.identifier();
 		
-		if(t.type != Type::Empty) 
+		if(t) 
 		{ 
 			while(!n.eof()) 
 			{
@@ -149,6 +153,8 @@ struct Parser
 				
 				t = n.parse(false, false);
 				if(t.type == Type::Unknown && t.text == ";")
+					break;
+				if(t.type == Type::Unknown && t.text == "}")
 					break;
 				if(lp == 0 && t.type == Type::Block)
 					break;
@@ -162,9 +168,10 @@ struct Parser
 					lp--, success = lp == 0;
 			}
 		}
-		
-		if(success && lp == 0 && result.length() > 0)
+				
+		if(success && lp == 0 && result.length() > 0) {
 			return Token { Type::Signature, result, result };
+		}
 		
 		return Token::Empty();
 	}
@@ -277,7 +284,7 @@ struct Parser
 		if(!eof() && buffer[position] == '{')
 		{
 			Parser tmp{position+1, buffer};
-			while(true) {
+			while(!tmp.eof()) {
 				auto token = tmp.parse(false);
 				if(token.type == Type::Unknown && token.text == "}") {
 					break;
@@ -300,11 +307,9 @@ struct Parser
 		
 		int lp = 0;
 		auto n = *this;
-		while(true) 
+		while(!n.eof()) 
 		{
 			auto t = n.parse(false, false);		
-			if(t.type == Type::Block || n.eof()) 
-				break;
 			if(t.type == Type::Unknown && t.text == "(") 
 				lp++;
 			else if(t.type == Type::Unknown && t.text == ")") 
@@ -354,14 +359,14 @@ std::string tbegin(const Token& token)
 	}
 	else if(token.type == Type::Signature)
 	{
-	return token.text;
+		return token.text;
 	}
 	
 	return "[&](auto " + token.text + ")";
 }
 
 std::string tend(const Token& token)
-{
+{	
 	if(token.type == Type::Block)
 		return transform(token.text);
 		
@@ -388,12 +393,10 @@ std::string transform(const std::string& input)
 			continue;
 		}
 				
-		if(token.type == Type::Block) {
+		if(token.type == Type::Block)
 			output += "{" + transform(token.innerText) + "}";
-		}
-		else {
+		else
 			output += token.text;
-		}
 		
 		buffer.consume(token);
 	}
@@ -419,6 +422,8 @@ int check(const std::string& test, const std::string& expected)
 void run_tests()
 {
 	int error = 0;
+	error += check(transform("auto foo() => int{42}"), "auto foo() { return int{42}; }");
+	error += check(transform("auto foo() => int{bar()}"), "auto foo() { return int{bar()}; }");
 	error += check(transform("hello"), "hello");
 	error += check(transform("x => x * 2"), "[&](auto x){ return x * 2; }");
 	error += check(transform("(x, y) => x+y"), "[&](auto x, auto y){ return x+y; }");

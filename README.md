@@ -11,6 +11,10 @@ Build a lambda C# style:
 	auto square = x => x * x;
 	std::cout << square(2) << std::endl; // output 4
 	
+Simple named function:
+
+	int foobar() => 42;
+	
 Bild & Usage
 ------------
 
