@@ -25,7 +25,6 @@ enum class Type
 	IdentifierList,
 	Block,
 	Comment,
-	// Numeric,
 	Arrow,
 	Unknown
 };
@@ -106,7 +105,7 @@ struct Parser
 		if(position+1 < buffer.length() && buffer[position] == '=' && buffer[position+1] == '>')
 			return Token{Type::Arrow, "=>", "=>"};
 		
-			return Token::Empty();
+		return Token::Empty();
 	}
 
 	Token identifier() 
@@ -116,14 +115,9 @@ struct Parser
 		for(auto i = position; i < buffer.size() ; i++)
 		{
 			auto x = buffer[i];
-			if(x >= '0' && x <= '9')
-			{
-				if(i == position)
-					break;
-
-				result += x;
-			}
-			else if((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || x == '_')
+			if(i == position && x >= '0' && x <= '9')
+				break;
+			else if((x >= '0' && x <= '9') || (x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || x == '_')
 				result += x;
 			else 
 				break;
@@ -144,34 +138,30 @@ struct Parser
 		Parser n{position, buffer};
 		auto t = n.identifier();
 		
-		if(t) 
-		{ 
-			while(!n.eof()) 
-			{
-				result += t.text;
-				n.consume(t);
-				
-				t = n.parse(false, false);
-				if(t.type == Type::Unknown && t.text == ";")
-					break;
-				if(t.type == Type::Unknown && t.text == "}")
-					break;
-				if(lp == 0 && t.type == Type::Block)
-					break;
-				if(t.type == Type::Arrow)
-					break;
-				if(t.type == Type::IdentifierList)
-					success = true;
-				if(t.type == Type::Unknown && t.text == "(")
-					lp++;
-				if(t.type == Type::Unknown && t.text == ")")
-					lp--, success = lp == 0;
-			}
+		while(t && !n.eof()) 
+		{
+			result += t.text;
+			n.consume(t);
+			
+			t = n.parse(false, false);
+			if(t.type == Type::Unknown && t.text == ";")
+				break;
+			if(t.type == Type::Unknown && t.text == "}")
+				break;
+			if(lp == 0 && t.type == Type::Block)
+				break;
+			if(t.type == Type::Arrow)
+				break;
+			if(t.type == Type::IdentifierList)
+				success = true;
+			if(t.type == Type::Unknown && t.text == "(")
+				lp++;
+			if(t.type == Type::Unknown && t.text == ")")
+				lp--, success = lp == 0;
 		}
-				
-		if(success && lp == 0 && result.length() > 0) {
+			
+		if(success && lp == 0 && result.length() > 0)
 			return Token { Type::Signature, result, result };
-		}
 		
 		return Token::Empty();
 	}
@@ -213,34 +203,31 @@ struct Parser
 		return Token::Empty();
 	}
 
+	std::string extract(const std::string& end)
+	{
+		std::string result;
+
+		for(auto i = position; i < buffer.length() ; i++)
+		{
+			if(buffer.substr(i, end.length()) == end) { 
+				result += end;
+				break;
+			}
+
+			result += buffer[i];
+		}
+
+		return result;
+	}
+
 	Token comment()
 	{
 		std::string result;
 
 		if(position+1 < buffer.length() && buffer[position] == '/' && buffer[position+1] == '/')
-		{
-			result = "//";
-			
-			for(auto i = position + 2; i < buffer.length() ; i++)
-			{
-				result += buffer[i];
-				if(buffer[i] == '\n') 
-					break;
-			}
-		}
+			result = extract("\n");
 		if(position+1 < buffer.length() && buffer[position] == '/' && buffer[position+1] == '*')
-		{
-			result = "/*";
-			
-			for(auto i = position + 2; i < buffer.length() ; i++)
-			{
-				result += buffer[i];
-				if(i+1 < buffer.length() && buffer[i] == '*' && buffer[i+1] == '/') {
-					result += '/';
-					break;
-				}
-			}
-		}
+			result = extract("*/");
 
 		if(result.length() > 0) 
 			return Token { Type::Comment, result, result };
@@ -265,8 +252,10 @@ struct Parser
 				backslash = false;
 			else if(x == '\\') 
 				backslash = true;
-			else if(x == start)
-			{	result += x; break; }
+			else if(x == start) {	
+				result += x; 
+				break; 
+			}
 
 			result += x;
 		}
