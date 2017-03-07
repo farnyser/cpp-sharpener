@@ -26,7 +26,7 @@ Null-conditional operator:
 	std::shared_ptr<foo> a = nullptr;
 	std::cout << (a?->bar() ?? "null") << std::endl; // output "null"
 	
-Bild & Usage
+Build & Usage
 ------------
 
 	g++ -std=c++14 main.cpp -o sharpener
