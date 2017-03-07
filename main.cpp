@@ -450,56 +450,42 @@ std::string transform(const std::string& input)
 	
 	while(!buffer.eof())
 	{
+		for(int i = 0; i < 3; i++)
 		{
-			auto token = buffer.parse(true);				
+			auto token = buffer.parse(i == 0 /* parse instruction */, i < 2 /* parse signature */);
 			auto next_buffer = buffer.next(token);
 			auto next = next_buffer.parse(false);
 			auto next_buffer2 = next_buffer.next(next);
 			auto next2 = next_buffer2.parse(true, false);
 			
-			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
+			// Debug ! :)
+			// std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
 
 			if(next.type == Type::FirstNotNull) {
 				replaceAndReset(next_buffer2, next2, "first_not_null(" + trim(token.text) + ", " + trim(next2.text) + ")");
 				continue;
 			}
-		}
-		
-		{
-			auto token = buffer.parse(false);				
-			auto next_buffer = buffer.next(token);
-			auto next = next_buffer.parse(false);
-			auto next_buffer2 = next_buffer.next(next);
-			auto next2 = next_buffer2.parse(true, false);		
-			
-			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
 			
 			if(next.type == Type::Arrow && (token.type == Type::Signature || token.type == Type::Identifier || token.type == Type::IdentifierList)) {
 				replaceAndReset(next_buffer2, next2, tbegin(token) + tend(next2));
 				continue;
 			}
-		}
-		
-		{
-			auto token = buffer.parse(false, false);				
-			auto next_buffer = buffer.next(token);
-			auto next = next_buffer.parse(false);
-			auto next_buffer2 = next_buffer.next(next);
-			auto next2 = next_buffer2.parse(true, false);		
-
-			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
 			
 			if(next.type == Type::CallOrNull) {
 				auto value = trim(token.text) + " != nullptr ? " + trim(token.text) + "->" + trim(next2.text) + " : nullptr";
 				replaceAndReset(next_buffer2, next2, value);
 				continue;
 			}
-			else if(token.type == Type::Block)
-				output += "{" + transform(token.innerText) + "}";
-			else
-				output += token.text;
 			
-			buffer.consume(token);
+			if(i == 2)
+			{
+				if(token.type == Type::Block)
+					output += "{" + transform(token.innerText) + "}";
+				else
+					output += token.text;
+				
+				buffer.consume(token);
+			}
 		}
 	}
 
