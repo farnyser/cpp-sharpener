@@ -27,6 +27,7 @@ enum class Type
 	Comment,
 	Arrow,
 	FirstNotNull,
+	CallOrNull,
 	Unknown
 };
 
@@ -68,6 +69,13 @@ struct Parser
 	void consume(const std::string& str) { position += str.length(); }
 	void consume(const Token& t) { position += t.text.length(); }
 
+	void replace(int upToPosition, const std::string& value) 
+	{
+		buffer = buffer.substr(0, position) 
+					+ value 
+					+ buffer.substr(upToPosition);
+	}
+	
 	Parser next(const Token& t) 
 	{
 		for(auto i = position+t.text.length(); i < buffer.length() ; i++) 
@@ -97,6 +105,8 @@ struct Parser
 				return arrow();
 			if(firstNotNull()) 
 				return firstNotNull();
+			if(callOrNull()) 
+				return callOrNull();
 			if(block()) 
 				return block();
 			
@@ -119,6 +129,14 @@ struct Parser
 	{
 		if(position+1 < buffer.length() && buffer[position] == '?' && buffer[position+1] == '?')
 			return Token{Type::FirstNotNull, "??", "??"};
+		
+		return Token::Empty();
+	}
+
+	Token callOrNull() 
+	{
+		if(position+2 < buffer.length() && buffer[position] == '?' && buffer[position+1] == '-' && buffer[position+2] == '>')
+			return Token{Type::CallOrNull, "?->", "?->"};
 		
 		return Token::Empty();
 	}
@@ -281,6 +299,17 @@ struct Parser
 
 			result += x;
 		}
+		
+		if(result.length() == 0)
+		{
+			for(auto i = position; i < buffer.size() ; i++) 
+			{
+				auto x = buffer[i];
+				if(x < '0' || x > '9')
+					break;
+				result += x;
+			}
+		}
 
 		if(result.length() > 0) 
 			return Token { Type::Literal, result, result };
@@ -328,6 +357,8 @@ struct Parser
 			else if(t.type == Type::Unknown && t.text == ";" ) 
 				break;
 			else if(t.type == Type::FirstNotNull) 
+				break;
+			else if(t.type == Type::CallOrNull) 
 				break;
 			else if(token_count == 0 && t.type != Type::Identifier)
 				break;
@@ -410,6 +441,13 @@ std::string transform(const std::string& input)
 	Parser buffer{0, input};
 	std::string output;
 	
+	auto replaceAndReset = [&](Parser& other, const Token& token, const std::string& value) {
+		other.consume(token);
+		buffer.replace(other.position, value);
+		output = "";
+		buffer.position = 0;
+	};
+	
 	while(!buffer.eof())
 	{
 		{
@@ -419,10 +457,10 @@ std::string transform(const std::string& input)
 			auto next_buffer2 = next_buffer.next(next);
 			auto next2 = next_buffer2.parse(true, false);
 			
+			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
+
 			if(next.type == Type::FirstNotNull) {
-				output += "first_not_null(" + trim(token.text) + ", " + trim(next2.text) + ")";
-				buffer = next_buffer2;
-				buffer.consume(next2);
+				replaceAndReset(next_buffer2, next2, "first_not_null(" + trim(token.text) + ", " + trim(next2.text) + ")");
 				continue;
 			}
 		}
@@ -433,19 +471,30 @@ std::string transform(const std::string& input)
 			auto next = next_buffer.parse(false);
 			auto next_buffer2 = next_buffer.next(next);
 			auto next2 = next_buffer2.parse(true, false);		
-
+			
+			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
+			
 			if(next.type == Type::Arrow && (token.type == Type::Signature || token.type == Type::Identifier || token.type == Type::IdentifierList)) {
-				output += tbegin(token) + tend(next2);
-				buffer = next_buffer2;
-				buffer.consume(next2);
+				replaceAndReset(next_buffer2, next2, tbegin(token) + tend(next2));
 				continue;
 			}
 		}
 		
 		{
 			auto token = buffer.parse(false, false);				
+			auto next_buffer = buffer.next(token);
+			auto next = next_buffer.parse(false);
+			auto next_buffer2 = next_buffer.next(next);
+			auto next2 = next_buffer2.parse(true, false);		
 
-			if(token.type == Type::Block)
+			//~ std::cout << token.debug() << "__" << next.debug() << "__" << next2.debug() << std::endl;
+			
+			if(next.type == Type::CallOrNull) {
+				auto value = trim(token.text) + " != nullptr ? " + trim(token.text) + "->" + trim(next2.text) + " : nullptr";
+				replaceAndReset(next_buffer2, next2, value);
+				continue;
+			}
+			else if(token.type == Type::Block)
 				output += "{" + transform(token.innerText) + "}";
 			else
 				output += token.text;
@@ -482,6 +531,7 @@ int check(const std::string& test, const std::string& expected)
 void run_tests()
 {
 	int error = 0;
+	error += check(transform("b?->foo()"), "b != nullptr ? b->foo() : nullptr");
 	error += check(transform("auto foo() => int{42}"), "auto foo() { return int{42}; }");
 	error += check(transform("auto foo() => int{bar()}"), "auto foo() { return int{bar()}; }");
 	error += check(transform("hello"), "hello");

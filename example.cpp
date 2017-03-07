@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 template <typename DATA, typename T>
@@ -11,9 +12,14 @@ void foreach(const DATA& data, const T& f)
 
 auto identity(auto x = {42}) => x; 
 
+struct foo { auto bar() => "hello"; };
+
 int main(int argc, char **argv)
 {
 	int a = 0;
+	std::shared_ptr<foo> b = nullptr;
+	
+	std::cout << (b?->bar() ?? "null") << std::endl;
 	std::cout << identity(a ?? 5) << std::endl;
 	std::cout << (x => x * x)(3) << std::endl;
 	std::cout << (x => x * x)(0 ?? 7) << std::endl;
