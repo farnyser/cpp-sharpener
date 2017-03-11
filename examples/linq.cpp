@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <vector>
-#include "linq/src/IEnumerable.hpp"
+#include "../linq/src/IEnumerable.hpp"
 
 using namespace linq;
 
