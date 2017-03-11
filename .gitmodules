@@ -1,0 +1,3 @@
+[submodule "linq"]
+	path = linq
+	url = https://github.com/farnyser/linq-cpp.git
