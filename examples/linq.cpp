@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 	auto data_filterd = data.Where(x => x % 5 == 0);
 	
 	std::cout << "divisible by 5, and lower than 30: " << std::endl;
-	for(auto& x : data_filterd.TakeWhile(x => x < 30))
+	for(auto x : data_filterd.TakeWhile(x => x < 30))
 		std::cout << " # " << x << std::endl;
 	
 	return EXIT_SUCCESS;
